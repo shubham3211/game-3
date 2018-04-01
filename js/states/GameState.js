@@ -3,13 +3,16 @@ var SpaceHipster = SpaceHipster || {};
 SpaceHipster.GameState = {
 
   //initiate game settings
-  init: function() {
+  init: function(currentLevel) {
     this.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
     
     this.game.physics.startSystem(Phaser.Physics.ARCADE);
     
     this.PLAYER_SPEED = 200;
     this.BULLET_SPEED = -1000;
+
+    this.numberLevels=3;
+    this.currentLevel=currentLevel?currentLevel:1;
 
   },
 
@@ -23,7 +26,9 @@ SpaceHipster.GameState = {
     this.load.spritesheet('redEnemy', 'assets/images/red_enemy.png', 50, 46, 3, 1, 1);   
     this.load.spritesheet('greenEnemy', 'assets/images/green_enemy.png', 50, 46, 3, 1, 1);   
 
-    
+    this.load.text('level1','assets/data/level1.json')
+    this.load.text('level2','assets/data/level2.json')
+    this.load.text('level3','assets/data/level3.json')
   },
   //executed after everything is loaded
   create: function() {
@@ -38,9 +43,11 @@ SpaceHipster.GameState = {
     this.initEnemies();
     this.shootingTimer=this.game.time.events.loop(Phaser.Timer.SECOND/5,this.createPlayerBullets,this)
 
+    this.loadLevel();
   },
   update: function() {
     this.game.physics.arcade.overlap(this.palyerBullets,this.enemies,this.damageEnemies,null,this);
+    this.game.physics.arcade.overlap(this.player,this.enemyBullets,this.killPlayer,null,this);
     this.player.body.velocity.x=0;
 
     if(this.game.input.activePointer.isDown){
@@ -69,14 +76,59 @@ SpaceHipster.GameState = {
     this.enemies=this.add.group();
     this.enemies.enableBody=true;
 
-    let enemy=new SpaceHipster.enemy(this.game,100,100,'greenEnemy',10,[]);
-    this.enemies.add(enemy);
-    enemy.body.velocity.x=100;
-    enemy.body.velocity.y=50;
+    this.enemyBullets=this.add.group();
+    this.enemyBullets.enableBody=true;
+
   },
   damageEnemies:function (bullet,enemy) {
     enemy.damageIt(1);
     bullet.kill();
+  },
+  killPlayer:function () {
+   this.player.kill();
+   this.game.state.start('GameState');
+  },
+  createEnemy:function (x,y,health,key,scale,speedX,speedY) {
+    let enemy=this.enemies.getFirstExists(false);
+    if(!enemy){
+      enemy=new SpaceHipster.enemy(this.game,x,y,key,health,this.enemyBullets);
+      this.enemies.add(enemy);
+    }
+    enemy.reset(x,y,health,key,scale,speedX,speedY);
+
+  },
+  loadLevel:function () {
+      this.currentEnemyIndex = 0;
+
+      this.levelData=JSON.parse(this.game.cache.getText('level'+this.currentLevel));
+
+      this.endOfLevelTimer=this.game.time.events.add(this.levelData.duration*1000,function () {
+         if(this.currentLevel<this.numberLevels){
+           this.currentLevel++;
+         } else {
+           this.currentLevel=1;
+         }
+
+         this.game.state.start('GameState',true,false,this.currentLevel);
+
+      },this)
+
+      this.scheduleNextEnemy();
+  },
+  scheduleNextEnemy:function () {
+    let nextEnemy=this.levelData.enemies[this.currentEnemyIndex];
+
+    if(nextEnemy){
+      console.log('nextEnemy')
+      let nextTime=1000*(nextEnemy.time-(this.currentEnemyIndex==0?0:this.levelData.enemies[this.currentEnemyIndex-1].time));
+      this.nextEnemyTimer=this.game.time.events.add(nextTime,function () {
+        this.createEnemy(nextEnemy.x*this.game.world.width,100,nextEnemy.health,nextEnemy.key
+        ,nextEnemy.scale,nextEnemy.speedX,nextEnemy.speedY);
+        this.currentEnemyIndex++;
+        this.scheduleNextEnemy();
+      },this);
+    }
+
   }  
 
 };
